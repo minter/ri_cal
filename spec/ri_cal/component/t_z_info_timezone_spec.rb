@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #- ©2009 Rick DeNatale, All rights reserved. Refer to the file README.txt for the license
 
 require File.join(File.dirname(__FILE__), %w[.. .. spec_helper])
@@ -36,6 +37,55 @@ END:VTIMEZONE
 ENDDATA
   end
 
+it "should produce an rfc representation with standard if only standard times" do
+  tz = RiCal::Component::TZInfoTimezone.new(TZInfo::Timezone.get("America/New_York"))
+  local_first = DateTime.parse("Nov 3, 2014")
+  local_last = DateTime.parse("Mar 7, 2015")
+  utc_first = tz.local_to_utc(local_first)
+  utc_last = tz.local_to_utc(local_last)
+  rez = tz.to_rfc2445_string(utc_first, utc_last)
+  rez.should == <<-ENDDATA
+BEGIN:VTIMEZONE
+TZID;X-RICAL-TZSOURCE=TZINFO:America/New_York
+BEGIN:STANDARD
+DTSTART:20141102T020000
+RDATE:20141102T020000
+TZOFFSETFROM:-0400
+TZOFFSETTO:-0500
+TZNAME:EST
+END:STANDARD
+END:VTIMEZONE
+ENDDATA
+  end
+
+it "should produce an rfc representation with standard and daylight if only daylight" do
+  tz = RiCal::Component::TZInfoTimezone.new(TZInfo::Timezone.get("America/New_York"))
+  local_first = DateTime.parse("Mar 10, 2014")
+  local_last = DateTime.parse("Nov 1, 2014")
+  utc_first = tz.local_to_utc(local_first)
+  utc_last = tz.local_to_utc(local_last)
+  rez = tz.to_rfc2445_string(utc_first, utc_last)
+  rez.should == <<-ENDDATA
+BEGIN:VTIMEZONE
+TZID;X-RICAL-TZSOURCE=TZINFO:America/New_York
+BEGIN:DAYLIGHT
+DTSTART:20140309T020000
+RDATE:20140309T020000
+TZOFFSETFROM:-0500
+TZOFFSETTO:-0400
+TZNAME:EDT
+END:DAYLIGHT
+BEGIN:STANDARD
+DTSTART:20141102T020000
+RDATE:20141102T020000
+TZOFFSETFROM:-0400
+TZOFFSETTO:-0500
+TZNAME:EST
+END:STANDARD
+END:VTIMEZONE
+ENDDATA
+  end
+
   TZInfo::Timezone.all_identifiers.each do |tz|
     context "TZInfo timezone #{tz}" do
       before(:each) do
@@ -56,5 +106,13 @@ ENDDATA
         end
       end
     end
+  end
+
+  it "should not raise an error with Ambigous times" do
+    tz = RiCal::Component::TZInfoTimezone.new(TZInfo::Timezone.get("America/New_York"))
+    local_start = DateTime.parse("2011-11-06T01:30:00+00:00")
+    # This time appears twice. Because at 2:00 am the clock falls back to 1:00 am again
+    local_end = DateTime.parse("Nov 30, 2012")
+    lambda { tz.export_local_to(StringIO.new, local_start, local_end) }.should_not raise_error(TZInfo::AmbiguousTime)
   end
 end
